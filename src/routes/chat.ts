@@ -59,7 +59,7 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
     const { message } = req.body;
 
     if (!message || typeof message !== "string") {
-        return res.status(400).json({ error: "Message is required..." });
+        return res.status(400).json({ error: "Message is required...." });
     }
 
     const supabase = createSupabaseClient(req.accessToken!);
