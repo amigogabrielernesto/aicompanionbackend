@@ -74,7 +74,9 @@ router.get("/", authenticate, async (req: AuthRequest, res) => {
     const { data: messages, count, error } = await supabase
         .from("chat_messages")
         .select("*", { count: "exact" })
-        .order("created_at", { ascending: true })
+        .eq("user_id", req.userId)
+        .order("turn_id", { ascending: false })
+        .order("role", { ascending: false })
         .range(offset, offset + limit - 1);
 
     if (error) {
