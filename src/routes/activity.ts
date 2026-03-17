@@ -79,14 +79,11 @@ router.patch("/:id", authenticate, async (req: AuthRequest, res) => {
     const updateData: any = {};
     if (status) {
         updateData.status = status;
-        if (status === "completed") {
-            updateData.completed = true;
-        } else if (status === "pending" || status === "canceled") {
-            updateData.completed = false;
-        }
+        updateData.status = status;
     }
     if (effectivenessScore !== undefined) {
-        updateData.effectiveness_score = effectivenessScore;
+        const score = parseInt(effectivenessScore as any, 10);
+        updateData.effectiveness_score = isNaN(score) ? 5 : Math.max(1, Math.min(10, score));
     }
 
     const { data, error } = await supabase
@@ -106,12 +103,14 @@ router.post("/activity-feedback", authenticate, async (req: AuthRequest, res) =>
     const { activityId, effectivenessScore } = req.body;
     const supabase = createSupabaseClient(req.accessToken!);
 
+    const score = parseInt(effectivenessScore as any, 10);
+    const validScore = isNaN(score) ? 5 : Math.max(1, Math.min(10, score));
+
     const { data, error } = await supabase
         .from("activities")
         .update({
-            completed: true,
             status: "completed",
-            effectiveness_score: effectivenessScore
+            effectiveness_score: validScore
         })
         .eq("id", activityId)
         .eq("user_id", req.userId)
