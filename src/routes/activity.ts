@@ -4,23 +4,121 @@ import { createSupabaseClient } from "../supabase";
 
 const router = Router();
 
+/**
+ * @swagger
+ * /activity:
+ *   get:
+ *     summary: List all user activities
+ *     tags: [Activities]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of activities
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ */
+router.get("/", authenticate, async (req: AuthRequest, res) => {
+    const supabase = createSupabaseClient(req.accessToken!);
+
+    const { data, error } = await supabase
+        .from("activities")
+        .select(`
+            *,
+            activity_types_catalog (
+                name
+            )
+        `)
+        .eq("user_id", req.userId)
+        .order("created_at", { ascending: false });
+
+    if (error) return res.status(400).json(error);
+    res.json(data);
+});
+
+/**
+ * @swagger
+ * /activity/{id}:
+ *   patch:
+ *     summary: Update activity status or effectiveness
+ *     tags: [Activities]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, completed, canceled]
+ *               effectivenessScore:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Activity updated successfully
+ */
+router.patch("/:id", authenticate, async (req: AuthRequest, res) => {
+    const { id } = req.params;
+    const { status, effectivenessScore } = req.body;
+    const supabase = createSupabaseClient(req.accessToken!);
+
+    const updateData: any = {};
+    if (status) {
+        updateData.status = status;
+        if (status === "completed") {
+            updateData.completed = true;
+        } else if (status === "pending" || status === "canceled") {
+            updateData.completed = false;
+        }
+    }
+    if (effectivenessScore !== undefined) {
+        updateData.effectiveness_score = effectivenessScore;
+    }
+
+    const { data, error } = await supabase
+        .from("activities")
+        .update(updateData)
+        .eq("id", id)
+        .eq("user_id", req.userId) // Security check
+        .select()
+        .single();
+
+    if (error) return res.status(400).json(error);
+    res.json(data);
+});
+
+// Mantener compatibilidad con el endpoint anterior por si acaso
 router.post("/activity-feedback", authenticate, async (req: AuthRequest, res) => {
     const { activityId, effectivenessScore } = req.body;
-
     const supabase = createSupabaseClient(req.accessToken!);
 
     const { data, error } = await supabase
         .from("activities")
         .update({
             completed: true,
+            status: "completed",
             effectiveness_score: effectivenessScore
         })
         .eq("id", activityId)
+        .eq("user_id", req.userId)
         .select()
         .single();
 
     if (error) return res.status(400).json(error);
-
     res.json(data);
 });
 

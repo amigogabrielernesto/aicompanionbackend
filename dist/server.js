@@ -29,7 +29,7 @@ app.get("/health", (_, res) => {
 app.use("/checkin", checkin_1.default);
 app.use("/history", history_1.default);
 app.use("/chat", chat_1.default);
-app.use("/", activity_1.default);
+app.use("/activity", activity_1.default);
 // activityRoutes tiene POST /activity-feedback
 // 🔹 Manejo global de errores (simple)
 app.use((err, _req, res, _next) => {

@@ -32,7 +32,7 @@ app.get("/health", (_, res) => {
 app.use("/checkin", checkinRoutes);
 app.use("/history", historyRoutes);
 app.use("/chat", chatRoutes);
-app.use("/", activityRoutes);
+app.use("/activity", activityRoutes);
 // activityRoutes tiene POST /activity-feedback
 
 // 🔹 Manejo global de errores (simple)
