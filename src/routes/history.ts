@@ -27,7 +27,7 @@ const router = Router();
  *         description: Number of records per page
  *     responses:
  *       200:
- *         description: A paginated list of chat messages
+ *         description: A paginated list of chat messages grouped by checkin
  *         content:
  *           application/json:
  *             schema:
@@ -40,14 +40,23 @@ const router = Router();
  *                     properties:
  *                       id:
  *                         type: string
- *                       room_id:
- *                         type: string
- *                       role:
- *                         type: string
- *                       content:
- *                         type: string
  *                       created_at:
  *                         type: string
+ *                       messages:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                             turn_id:
+ *                               type: integer
+ *                             role:
+ *                               type: string
+ *                             content:
+ *                               type: string
+ *                             created_at:
+ *                               type: string
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -71,20 +80,43 @@ router.get("/", authenticate, async (req: AuthRequest, res) => {
 
     console.log(`Fetching chat history for user ${req.userId} - page: ${page}, limit: ${limit}`);
 
-    const { data: messages, count, error } = await supabase
-        .from("chat_messages")
-        .select("*", { count: "exact" })
+    const { data: checkinsData, count, error } = await supabase
+        .from("checkins")
+        .select(`
+            id,
+            created_at,
+            chat_messages (
+                id,
+                turn_id,
+                role,
+                content,
+                created_at
+            )
+        `, { count: "exact" })
         .eq("user_id", req.userId)
-        .order("turn_id", { ascending: false })
-        .order("role", { ascending: false })
+        .order("created_at", { ascending: false })
+        // Nota: para ordenar la relación hija en la misma consulta, Supabase SDK usa syntax string filters
+        // pero dado que el soporte varía en el SDK, ordenamos manualmente los items hijos después
         .range(offset, offset + limit - 1);
 
     if (error) {
+        console.error("Error fetching history:", error);
         return res.status(400).json(error);
     }
 
+    // Remapeamos el payload para asegurar que los hijos estén ordenados y en la llave "messages" equivalente al json_agg
+    const formattedMessages = checkinsData?.map((checkin: any) => {
+        // Ordenar los mensajes por turn_id ASC como pedía la query original (ORDER BY m.turn_id ASC)
+        const sortedChats = (checkin.chat_messages || []).sort((a: any, b: any) => a.turn_id - b.turn_id);
+        return {
+            id: checkin.id,
+            created_at: checkin.created_at,
+            messages: sortedChats
+        };
+    }) || [];
+
     res.json({
-        messages,
+        messages: formattedMessages,
         pagination: {
             page,
             limit,

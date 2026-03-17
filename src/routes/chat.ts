@@ -2,7 +2,7 @@ import { Router } from "express";
 import { authenticate, AuthRequest } from "../middleware/auth";
 import { createSupabaseClient } from "../supabase";
 import { generateEmbedding } from "../services/embedding";
-import { askAI } from "../services/ai";
+import { askAIChat } from "../services/ai";
 import activity from "./activity";
 
 /**
@@ -52,62 +52,76 @@ import activity from "./activity";
  */
 
 
-
 const router = Router();
 
 router.post("/", authenticate, async (req: AuthRequest, res) => {
-    const { message } = req.body;
 
-    if (!message || typeof message !== "string") {
+    let { message, conversation_id } = req.body;
+
+    if (!message) {
         return res.status(400).json({ error: "Message is required" });
     }
 
     const supabase = createSupabaseClient(req.accessToken!);
 
     try {
-        // 1️⃣ Guardar mensaje usuario
-        const { data: userMessage, error: insertError } = await supabase
+        // Si no se provee un conversation_id, buscaremos el último del usuario activo
+        if (!conversation_id || conversation_id === "undefined" || conversation_id === "null") {
+            const { data: latestChat, error: latestChatErr } = await supabase
+                .from("chat_messages")
+                .select("conversation_id")
+                .eq("user_id", req.userId)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+                
+            if (latestChat && latestChat.conversation_id) {
+                conversation_id = latestChat.conversation_id;
+            } else {
+                // Si el usuario no tiene ninguna conversación, retornar error y pedir que cree un check-in primero
+                return res.status(400).json({ error: "No active conversation_id found for user. Please create a checkin first." });
+            }
+        }
+
+        // 1️⃣ Obtener turn_id desde Supabase iterando sobre chat_messages
+        const { data: lastMessage, error: turnError } = await supabase
+            .from("chat_messages")
+            .select("turn_id")
+            .eq("conversation_id", conversation_id)
+            .order("turn_id", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        const turn_id = lastMessage?.turn_id ? lastMessage.turn_id + 1 : 1;
+
+        if (turnError) {
+            console.error("TurnId Error:", turnError);
+            return res.status(500).json({ error: "Failed to generate turn_id" });
+        }
+
+        // 2️⃣ Guardar mensaje usuario
+        const { data: userMessage } = await supabase
             .from("chat_messages")
             .insert({
                 user_id: req.userId,
+                conversation_id,
                 role: "user",
                 content: message,
+                turn_id
             })
             .select()
             .single();
 
-        if (insertError) {
-            console.error("DB User Message Insert Error:", insertError);
-            return res.status(500).json({
-                error: "Failed to save user message",
-                details: insertError.message,
-            });
-        }
+        // 3️⃣ Generar embedding
+        const embedding = await generateEmbedding(message);
 
-        // 2️⃣ Generar embedding
-        let embedding;
-        try {
-            embedding = await generateEmbedding(message);
-        } catch (embError: any) {
-            console.error("Embedding Generation Error:", embError);
-            return res.status(500).json({
-                error: "Failed to generate embedding",
-                details: embError.message,
-            });
-        }
-
-        // 3️⃣ Actualizar embedding
-        const { error: updateError } = await supabase
+        await supabase
             .from("chat_messages")
             .update({ embedding })
             .eq("id", userMessage.id);
 
-        if (updateError) {
-            console.error("DB Update Embedding Error:", updateError);
-        }
-
-        // 4️⃣ Buscar contexto similar
-        const { data: contextMessages, error: rpcError } = await supabase.rpc(
+        // 4️⃣ Buscar contexto
+        const { data: contextMessages } = await supabase.rpc(
             "match_chat_messages",
             {
                 query_embedding: embedding,
@@ -116,101 +130,40 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
             }
         );
 
-        if (rpcError) {
-            console.error("DB Context RPC Error:", rpcError);
-        }
-
         const context = contextMessages?.map((m: any) => m.content) || [];
 
-        // 5️⃣ Llamar AI
-        let aiResponse;
-        try {
-            aiResponse = await askAI(message, context);
-        } catch (aiError: any) {
-            console.error("AI Service Error:", aiError);
-            return res.status(500).json({
-                error: "AI Service failed",
-                details: aiError.message,
-            });
-        }
+        // 5️⃣ Preguntar a la IA
+        const aiResponse = await askAIChat(message, context);
 
-        // 6️⃣ Guardar mensaje AI
-        const { error: aiInsertError } = await supabase
+        let fullMessage = aiResponse.message;
+
+        // 6️⃣ Guardar respuesta AI
+        const { data: aiMessage } = await supabase
             .from("chat_messages")
             .insert({
                 user_id: req.userId,
+                conversation_id,
                 role: "assistant",
-                content: aiResponse.message,
-            });
+                content: fullMessage,
+                turn_id
+            })
+            .select()
+            .single();
 
-        if (aiInsertError) {
-            console.error("DB AI Message Insert Error:", aiInsertError);
-        }
-
-        // 7️⃣ Guardar actividades sugeridas (versión optimizada)
-        if (aiResponse.tasks && aiResponse.tasks.length > 0) {
-
-            const taskTitles = aiResponse.tasks.map(t => t.title);
-
-            // 1️⃣ Insertar activity types si no existen
-            const { error: upsertError } = await supabase
-                .from("activity_types_catalog")
-                .upsert(
-                    taskTitles.map(name => ({ name })),
-                    { onConflict: "name" }
-                );
-
-            if (upsertError) {
-                console.error("ActivityTypes Upsert Error:", upsertError);
-            }
-
-            // 2️⃣ Obtener IDs de todos los activity types
-            const { data: activityTypes, error: selectError } = await supabase
-                .from("activity_types_catalog")
-                .select("id, name")
-                .in("name", taskTitles);
-
-            if (selectError) {
-                console.error("ActivityTypes Select Error:", selectError);
-                return;
-            }
-
-            // Crear mapa name -> id
-            const typeMap = new Map(
-                activityTypes.map(t => [t.name, t.id])
-            );
-
-            // 3️⃣ Crear actividades
-            const activities = aiResponse.tasks.map(task => ({
-                user_id: req.userId,
-                activity_type_id: typeMap.get(task.title),
-                description: task.description,
-                duration_minutes: null
-            }));
-
-            // 4️⃣ Insertar actividades
-            const { error: activitiesError } = await supabase
-                .from("activities")
-                .insert(activities);
-
-            if (activitiesError) {
-                console.error("Activities Insert Error:", activitiesError);
-            }
-        }
-
-        // 8️⃣ Respuesta al frontend
         return res.json({
-            message: aiResponse.message,
-            tasks: aiResponse.tasks,
+            message: aiResponse.message
         });
 
     } catch (error: any) {
-        console.error("Unexpected Chat error:", error);
+
+        console.error("Chat error:", error);
+
         return res.status(500).json({
             error: "Internal server error",
-            details: error.message,
+            details: error.message
         });
     }
+
 });
 
 export default router;

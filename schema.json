@@ -1,0 +1,47 @@
+{
+  "required": [
+    "id",
+    "role",
+    "content"
+  ],
+  "properties": {
+    "id": {
+      "default": "extensions.uuid_generate_v4()",
+      "description": "Note:\nThis is a Primary Key.<pk/>",
+      "format": "uuid",
+      "type": "string"
+    },
+    "user_id": {
+      "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>",
+      "format": "uuid",
+      "type": "string"
+    },
+    "role": {
+      "format": "text",
+      "type": "string"
+    },
+    "content": {
+      "format": "text",
+      "type": "string"
+    },
+    "embedding": {
+      "format": "public.vector(1536)",
+      "type": "string"
+    },
+    "created_at": {
+      "default": "now()",
+      "format": "timestamp with time zone",
+      "type": "string"
+    },
+    "conversation_id": {
+      "description": "Note:\nThis is a Foreign Key to `checkins.id`.<fk table='checkins' column='id'/>",
+      "format": "uuid",
+      "type": "string"
+    },
+    "turn_id": {
+      "format": "integer",
+      "type": "integer"
+    }
+  },
+  "type": "object"
+}

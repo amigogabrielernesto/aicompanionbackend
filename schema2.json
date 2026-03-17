@@ -1,0 +1,59 @@
+{
+  "activities": {
+    "required": [
+      "id"
+    ],
+    "properties": {
+      "id": {
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>",
+        "format": "uuid",
+        "type": "string"
+      },
+      "user_id": {
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>",
+        "format": "uuid",
+        "type": "string"
+      },
+      "chat_id": {
+        "description": "Note:\nThis is a Foreign Key to `chat_messages.id`.<fk table='chat_messages' column='id'/>",
+        "format": "uuid",
+        "type": "string"
+      },
+      "activity_type_id": {
+        "description": "Note:\nThis is a Foreign Key to `activity_types_catalog.id`.<fk table='activity_types_catalog' column='id'/>",
+        "format": "uuid",
+        "type": "string"
+      },
+      "description": {
+        "format": "text",
+        "type": "string"
+      },
+      "duration_minutes": {
+        "format": "integer",
+        "type": "integer"
+      },
+      "suggested_at": {
+        "default": "now()",
+        "format": "timestamp with time zone",
+        "type": "string"
+      },
+      "completed": {
+        "default": false,
+        "format": "boolean",
+        "type": "boolean"
+      },
+      "effectiveness_score": {
+        "format": "integer",
+        "type": "integer"
+      },
+      "created_at": {
+        "default": "now()",
+        "format": "timestamp with time zone",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "activity_types": null
+}
