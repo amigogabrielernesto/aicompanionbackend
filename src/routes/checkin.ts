@@ -22,6 +22,7 @@ const router = Router();
  *             properties:
  *               mood:
  *                 type: string
+ *                 enum: [Alegre, Feliz, Tranquilo, Sereno, Satisfecho, Contento, Optimista, Esperanzado, Inspirado, Agradecido, En paz, Entusiasmado, Confiado, Indiferente, Pensativo, Reflexivo, Nostálgico, Expectante, Curioso, Sorprendido, Distraído, Triste, Melancólico, Desanimado, Frustrado, Decepcionado, Irritado, Enojado, Ansioso, Inseguro, Preocupado, Confundido, Solo]
  *               energy:
  *                 type: number
  *               stress:
@@ -62,6 +63,20 @@ import { askAI } from "../services/ai";
 
 router.post("/", authenticate, async (req: AuthRequest, res) => {
     let { mood, energy, stress, notes } = req.body;
+
+    const allowedMoods = [
+        'Alegre', 'Feliz', 'Tranquilo', 'Sereno', 'Satisfecho', 'Contento', 
+        'Optimista', 'Esperanzado', 'Inspirado', 'Agradecido', 'En paz', 
+        'Entusiasmado', 'Confiado', 'Indiferente', 'Pensativo', 'Reflexivo', 
+        'Nostálgico', 'Expectante', 'Curioso', 'Sorprendido', 'Distraído', 
+        'Triste', 'Melancólico', 'Desanimado', 'Frustrado', 'Decepcionado', 
+        'Irritado', 'Enojado', 'Ansioso', 'Inseguro', 'Preocupado', 
+        'Confundido', 'Solo'
+    ];
+
+    if (mood && !allowedMoods.includes(mood)) {
+        return res.status(400).json({ error: "Mood not allowed", allowedMoods });
+    }
 
     // Validate and parse energy and stress (default to 3 if invalid, bound between 1 and 10)
     energy = parseInt(energy, 10);
