@@ -12,6 +12,7 @@ import checkinRoutes from "./routes/checkin";
 import historyRoutes from "./routes/history";
 import chatRoutes from "./routes/chat";
 import activityRoutes from "./routes/activity";
+import userRoutes from "./routes/user";
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use("/checkin", checkinRoutes);
 app.use("/history", historyRoutes);
 app.use("/chat", chatRoutes);
 app.use("/activity", activityRoutes);
+app.use("/user", userRoutes);
 // activityRoutes tiene POST /activity-feedback
 
 // 🔹 Manejo global de errores (simple)

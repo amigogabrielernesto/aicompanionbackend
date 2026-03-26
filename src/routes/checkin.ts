@@ -219,7 +219,8 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
                             chat_id: aiMessage.id,
                             description: task.description,
                             duration_minutes: null,
-                            activity_type_id: activityTypeId
+                            activity_type_id: activityTypeId,
+                            status: 'pending'
                         });
                     }
 

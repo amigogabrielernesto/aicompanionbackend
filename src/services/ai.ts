@@ -59,7 +59,7 @@ ${message}
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-1.5-flash",
             contents: [
                 {
                     role: "user",
@@ -68,8 +68,8 @@ ${message}
             ],
             config: {
                 responseMimeType: "application/json",
-                maxOutputTokens: 400,
-                temperature: 0.6
+                maxOutputTokens: parseInt(process.env.AI_MAX_TOKENS || "1000", 10),
+                temperature: 0.7
             }
         });
 
@@ -88,22 +88,29 @@ ${message}
             text = jsonMatch[0];
         }
 
+        console.log("Raw AI response:", text);
         const parsed = JSON.parse(text) as AIResponse;
 
-        // Validación fuerte de estructura
+        // Validación flexible de estructura
         if (
             typeof parsed.message !== "string" ||
             !Array.isArray(parsed.tasks) ||
-            parsed.tasks.length !== 2 ||
-            typeof parsed.tasks[0]?.title !== "string" ||
-            typeof parsed.tasks[0]?.description !== "string"
+            parsed.tasks.length === 0
         ) {
+            console.error("AI Response missing message or tasks:", parsed);
             throw new Error("Invalid AI response structure");
         }
 
+        // Asegurar que cada tarea tenga lo necesario
+        parsed.tasks = parsed.tasks.filter(t => typeof t?.title === "string" && typeof t?.description === "string");
+        
+        if (parsed.tasks.length === 0) {
+            throw new Error("No valid tasks found in AI response");
+        }
+
         return parsed;
-    } catch (error) {
-        console.error("AI Service error:", error);
+    } catch (error: any) {
+        console.error("AI Service error:", error.message || error);
 
         // Fallback seguro si falla la IA
         return {
@@ -157,7 +164,7 @@ ${message}
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-1.5-flash",
             contents: [
                 {
                     role: "user",
@@ -166,7 +173,7 @@ ${message}
             ],
             config: {
                 responseMimeType: "application/json",
-                maxOutputTokens: 600,
+                maxOutputTokens: parseInt(process.env.AI_MAX_TOKENS || "1000", 10),
                 temperature: 0.7
             }
         });
