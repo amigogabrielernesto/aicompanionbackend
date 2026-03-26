@@ -15,6 +15,7 @@ const checkin_1 = __importDefault(require("./routes/checkin"));
 const history_1 = __importDefault(require("./routes/history"));
 const chat_1 = __importDefault(require("./routes/chat"));
 const activity_1 = __importDefault(require("./routes/activity"));
+const user_1 = __importDefault(require("./routes/user"));
 const app = (0, express_1.default)();
 // 🔹 Middlewares globales
 app.use((0, cors_1.default)({
@@ -30,6 +31,7 @@ app.use("/checkin", checkin_1.default);
 app.use("/history", history_1.default);
 app.use("/chat", chat_1.default);
 app.use("/activity", activity_1.default);
+app.use("/user", user_1.default);
 // activityRoutes tiene POST /activity-feedback
 // 🔹 Manejo global de errores (simple)
 app.use((err, _req, res, _next) => {

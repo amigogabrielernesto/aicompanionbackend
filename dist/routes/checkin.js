@@ -22,6 +22,7 @@ const router = (0, express_1.Router)();
  *             properties:
  *               mood:
  *                 type: string
+ *                 enum: [Alegre, Feliz, Tranquilo, Sereno, Satisfecho, Contento, Optimista, Esperanzado, Inspirado, Agradecido, En paz, Entusiasmado, Confiado, Indiferente, Pensativo, Reflexivo, Nostálgico, Expectante, Curioso, Sorprendido, Distraído, Triste, Melancólico, Desanimado, Frustrado, Decepcionado, Irritado, Enojado, Ansioso, Inseguro, Preocupado, Confundido, Solo]
  *               energy:
  *                 type: number
  *               stress:
@@ -59,6 +60,18 @@ const embedding_1 = require("../services/embedding");
 const ai_1 = require("../services/ai");
 router.post("/", auth_1.authenticate, async (req, res) => {
     let { mood, energy, stress, notes } = req.body;
+    const allowedMoods = [
+        'Alegre', 'Feliz', 'Tranquilo', 'Sereno', 'Satisfecho', 'Contento',
+        'Optimista', 'Esperanzado', 'Inspirado', 'Agradecido', 'En paz',
+        'Entusiasmado', 'Confiado', 'Indiferente', 'Pensativo', 'Reflexivo',
+        'Nostálgico', 'Expectante', 'Curioso', 'Sorprendido', 'Distraído',
+        'Triste', 'Melancólico', 'Desanimado', 'Frustrado', 'Decepcionado',
+        'Irritado', 'Enojado', 'Ansioso', 'Inseguro', 'Preocupado',
+        'Confundido', 'Solo'
+    ];
+    if (mood && !allowedMoods.includes(mood)) {
+        return res.status(400).json({ error: "Mood not allowed", allowedMoods });
+    }
     // Validate and parse energy and stress (default to 3 if invalid, bound between 1 and 10)
     energy = parseInt(energy, 10);
     energy = isNaN(energy) ? 3 : Math.max(1, Math.min(10, energy));
@@ -180,7 +193,8 @@ router.post("/", auth_1.authenticate, async (req, res) => {
                             chat_id: aiMessage.id,
                             description: task.description,
                             duration_minutes: null,
-                            activity_type_id: activityTypeId
+                            activity_type_id: activityTypeId,
+                            status: 'pending'
                         });
                     }
                     if (activitiesToInsert.length > 0) {

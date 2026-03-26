@@ -63,7 +63,7 @@ router.get("/", auth_1.authenticate, async (req, res) => {
  *               status:
  *                 type: string
  *                 enum: [pending, completed, canceled]
- *               effectivenessScore:
+ *               effectiveness_score:
  *                 type: integer
  *     responses:
  *       200:
@@ -71,16 +71,17 @@ router.get("/", auth_1.authenticate, async (req, res) => {
  */
 router.patch("/:id", auth_1.authenticate, async (req, res) => {
     const { id } = req.params;
-    const { status, effectivenessScore } = req.body;
+    const { status, effectiveness_score } = req.body;
     const supabase = (0, supabase_1.createSupabaseClient)(req.accessToken);
     const updateData = {};
     if (status) {
         updateData.status = status;
-        updateData.status = status;
     }
-    if (effectivenessScore !== undefined) {
-        const score = parseInt(effectivenessScore, 10);
-        updateData.effectiveness_score = isNaN(score) ? 5 : Math.max(1, Math.min(10, score));
+    // Support both camelCase and snake_case for effectiveness score
+    const scoreValue = effectiveness_score !== undefined ? effectiveness_score : effectiveness_score;
+    if (scoreValue !== undefined) {
+        const score = parseInt(scoreValue, 10);
+        updateData.effectiveness_score = isNaN(score) ? 5 : Math.max(0, Math.min(10, score));
     }
     const { data, error } = await supabase
         .from("activities")
@@ -95,10 +96,11 @@ router.patch("/:id", auth_1.authenticate, async (req, res) => {
 });
 // Mantener compatibilidad con el endpoint anterior por si acaso
 router.post("/activity-feedback", auth_1.authenticate, async (req, res) => {
-    const { activityId, effectivenessScore } = req.body;
+    const { activityId, effectiveness_score } = req.body;
     const supabase = (0, supabase_1.createSupabaseClient)(req.accessToken);
-    const score = parseInt(effectivenessScore, 10);
-    const validScore = isNaN(score) ? 5 : Math.max(1, Math.min(10, score));
+    const scoreValue = effectiveness_score !== undefined ? effectiveness_score : effectiveness_score;
+    const score = parseInt(scoreValue, 10);
+    const validScore = isNaN(score) ? 5 : Math.max(0, Math.min(10, score));
     const { data, error } = await supabase
         .from("activities")
         .update({
