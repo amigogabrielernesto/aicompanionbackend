@@ -3,6 +3,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.askAI = askAI;
 exports.askAIChat = askAIChat;
 const genai_1 = require("@google/genai");
+/* =========================
+   CONFIG
+========================= */
+const AI_CONFIG = {
+    temperature: parseFloat(process.env.AI_TEMPERATURE || "0.7"),
+    maxOutputTokens: parseInt(process.env.AI_MAX_TOKENS || "1000", 10),
+    model: process.env.AI_MODEL || "gemini-2.5-flash",
+    timeoutMs: parseInt(process.env.AI_TIMEOUTMS || "8000", 10),
+};
+/* =========================
+   INIT
+========================= */
 function getAI() {
     const apiKey = process.env.AI_API_KEY;
     if (!apiKey) {
@@ -10,161 +22,188 @@ function getAI() {
     }
     return new genai_1.GoogleGenAI({ apiKey });
 }
+/* =========================
+   TIMEOUT HELPER
+========================= */
+function withTimeout(promise, ms) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ms);
+    return promise.finally(() => clearTimeout(timeout));
+}
+/* =========================
+   ASK AI (WITH TASKS)
+========================= */
 async function askAI(message, context) {
     const ai = getAI();
-    // Limitar contexto para evitar exceso de tokens
     const limitedContext = context.slice(-5);
     const prompt = `
-Eres un asistente profesional de bienestar emocional.
+Responde en JSON:
 
-INSTRUCCIONES:
-- Responde con un mensaje corto empático (máximo 2 líneas).
-- Luego sugiere EXACTAMENTE 2 actividades prácticas.
-- Responde SOLO en JSON válido.
-- No agregues texto fuera del JSON.
-
-Formato obligatorio:
 {
-  "message": "texto corto empático",
+  "message": "máx 2 líneas empáticas",
   "tasks": [
-    {
-      "title": "título corto",
-      "description": "descripción breve"
-    },
-    {
-      "title": "título corto",
-      "description": "descripción breve"
-    }
+    { "title": "...", "description": "..." },
+    { "title": "...", "description": "..." }
   ]
 }
 
-Contexto previo:
+Reglas:
+- Exactamente 2 tareas
+- Mensaje corto y empático
+- Sin texto fuera del JSON
+
+Contexto:
 ${limitedContext.join("\n")}
 
-Usuario:
-${message}
+Usuario: ${message}
 `;
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-1.5-flash",
+        const response = await withTimeout(ai.models.generateContent({
+            model: AI_CONFIG.model,
             contents: [
                 {
                     role: "user",
-                    parts: [{ text: prompt }]
-                }
+                    parts: [{ text: prompt }],
+                },
             ],
             config: {
+                temperature: AI_CONFIG.temperature,
+                maxOutputTokens: AI_CONFIG.maxOutputTokens,
                 responseMimeType: "application/json",
-                maxOutputTokens: parseInt(process.env.AI_MAX_TOKENS || "1000", 10),
-                temperature: 0.7
-            }
-        });
-        // Obtener texto de forma segura
-        let text = response.text ??
-            response.candidates?.[0]?.content?.parts?.[0]?.text ??
-            "";
-        // Limpiar markdown si aparece
-        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        // Extraer JSON válido si la IA agrega texto extra
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            text = jsonMatch[0];
+                responseSchema: {
+                    type: "object",
+                    properties: {
+                        message: { type: "string" },
+                        tasks: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    title: { type: "string" },
+                                    description: { type: "string" },
+                                },
+                                required: ["title", "description"],
+                            },
+                        },
+                    },
+                    required: ["message", "tasks"],
+                },
+            },
+        }), AI_CONFIG.timeoutMs);
+        const text = response.text;
+        if (!text)
+            throw new Error("No text produced by AI");
+        const data = JSON.parse(text);
+        /* =========================
+           VALIDATIONS
+        ========================= */
+        if (!data || typeof data.message !== "string") {
+            throw new Error("Invalid AI response: missing message");
         }
-        console.log("Raw AI response:", text);
-        const parsed = JSON.parse(text);
-        // Validación flexible de estructura
-        if (typeof parsed.message !== "string" ||
-            !Array.isArray(parsed.tasks) ||
-            parsed.tasks.length === 0) {
-            console.error("AI Response missing message or tasks:", parsed);
-            throw new Error("Invalid AI response structure");
+        if (!Array.isArray(data.tasks)) {
+            throw new Error("Invalid AI response: tasks must be array");
         }
-        // Asegurar que cada tarea tenga lo necesario
-        parsed.tasks = parsed.tasks.filter(t => typeof t?.title === "string" && typeof t?.description === "string");
-        if (parsed.tasks.length === 0) {
-            throw new Error("No valid tasks found in AI response");
+        // Filtrar tareas válidas
+        let tasks = data.tasks.filter((t) => t &&
+            typeof t.title === "string" &&
+            typeof t.description === "string");
+        // Asegurar exactamente 2 tareas
+        if (tasks.length >= 2) {
+            tasks = tasks.slice(0, 2);
         }
-        return parsed;
+        else {
+            throw new Error("Not enough valid tasks");
+        }
+        return {
+            message: data.message,
+            tasks,
+        };
     }
     catch (error) {
-        console.error("AI Service error:", error.message || error);
-        // Fallback seguro si falla la IA
+        console.error("AI Service error:", {
+            message: error?.message,
+            stack: error?.stack,
+        });
+        /* =========================
+           FALLBACK
+        ========================= */
         return {
             message: "Parece que estás pasando por un momento difícil. Aquí tienes dos pequeñas actividades que podrían ayudarte.",
             tasks: [
                 {
                     title: "Respiración profunda",
-                    description: "Respira profundamente durante 2 minutos, inhalando por la nariz y exhalando lentamente."
+                    description: "Respira profundamente durante 2 minutos, inhalando por la nariz y exhalando lentamente.",
                 },
                 {
                     title: "Pequeña caminata",
-                    description: "Si puedes, da una caminata corta de 5 minutos para despejar tu mente."
-                }
-            ]
+                    description: "Da una caminata corta de 5 minutos para despejar tu mente.",
+                },
+            ],
         };
     }
 }
+/* =========================
+   CHAT ONLY (NO TASKS)
+========================= */
 async function askAIChat(message, context) {
     const ai = getAI();
-    // Limitar contexto para evitar exceso de tokens
     const limitedContext = context.slice(-5);
     const prompt = `
-Eres un asistente profesional de bienestar emocional.
+Responde en JSON:
 
-INSTRUCCIONES:
-- Responde con un mensaje mas largo empático de varias lineas. QUE NO SUGIERA ACTIVIDADES.
-- Responde SOLO en JSON válido.
-- No agregues texto fuera del JSON.
-
-Formato obligatorio:
 {
-  "message": "texto largo empático"
+  "message": "respuesta empática no tan larga (sin sugerir actividades)"
 }
 
-Contexto previo:
+Reglas:
+- Mensaje empático
+- No tan largo
+- No sugerir tareas
+- Sin texto fuera del JSON
+
+Contexto:
 ${limitedContext.join("\n")}
 
-Usuario:
-${message}
+Usuario: ${message}
 `;
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-1.5-flash",
+        const response = await withTimeout(ai.models.generateContent({
+            model: AI_CONFIG.model,
             contents: [
                 {
                     role: "user",
-                    parts: [{ text: prompt }]
-                }
+                    parts: [{ text: prompt }],
+                },
             ],
             config: {
+                temperature: AI_CONFIG.temperature,
+                maxOutputTokens: AI_CONFIG.maxOutputTokens,
                 responseMimeType: "application/json",
-                maxOutputTokens: parseInt(process.env.AI_MAX_TOKENS || "1000", 10),
-                temperature: 0.7
-            }
-        });
-        // Obtener texto de forma segura
-        let text = response.text ??
-            response.candidates?.[0]?.content?.parts?.[0]?.text ??
-            "";
-        // Limpiar markdown si aparece
-        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        // Extraer JSON válido si la IA agrega texto extra
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            text = jsonMatch[0];
+                responseSchema: {
+                    type: "object",
+                    properties: {
+                        message: { type: "string" },
+                    },
+                    required: ["message"],
+                },
+            },
+        }), AI_CONFIG.timeoutMs);
+        const text = response.text;
+        if (!text)
+            throw new Error("No text produced by AI chat");
+        const data = JSON.parse(text);
+        if (!data || typeof data.message !== "string") {
+            throw new Error("Invalid AI chat response");
         }
-        const parsed = JSON.parse(text);
-        // Validación fuerte de estructura
-        if (typeof parsed.message !== "string") {
-            throw new Error("Invalid AI response structure");
-        }
-        return parsed;
+        return data;
     }
     catch (error) {
-        console.error("AI Service error in Chat:", error);
-        // Fallback seguro si falla la IA
+        console.error("AI Chat error:", {
+            message: error?.message,
+            stack: error?.stack,
+        });
         return {
-            message: "Entiendo lo que me dices. Estoy aquí para escucharte y acompañarte en este momento. A veces hablarlo ayuda a poner las cosas en perspectiva.",
+            message: "Entiendo lo que estás pasando. Estoy aquí para escucharte y acompañarte en este momento. A veces compartirlo puede ayudar a verlo con más claridad.",
         };
     }
 }

@@ -4,10 +4,10 @@ import { GoogleGenAI } from "@google/genai";
    CONFIG
 ========================= */
 const AI_CONFIG = {
-    temperature: 0.7,
+    temperature: parseFloat(process.env.AI_TEMPERATURE || "0.7"),
     maxOutputTokens: parseInt(process.env.AI_MAX_TOKENS || "1000", 10),
-    model: "gemini-2.5-flash",
-    timeoutMs: 8000,
+    model: process.env.AI_MODEL || "gemini-2.5-flash",
+    timeoutMs: parseInt(process.env.AI_TIMEOUTMS || "8000", 10),
 };
 
 /* =========================
@@ -21,7 +21,6 @@ export type AITask = {
 export type AIResponse = {
     message: string;
     tasks: AITask[];
-    detectedUserTask: string | null;
 };
 
 export type AIChatResponse = {
@@ -71,14 +70,12 @@ Responde en JSON:
   "tasks": [
     { "title": "...", "description": "..." },
     { "title": "...", "description": "..." }
-  ],
-  "detectedUserTask": "..." o null
+  ]
 }
 
 Reglas:
 - Exactamente 2 tareas
 - Mensaje corto y empático
-- Detecta si el usuario mencionó una tarea personal
 - Sin texto fuera del JSON
 
 Contexto:
@@ -116,11 +113,8 @@ Usuario: ${message}
                                     required: ["title", "description"],
                                 },
                             },
-                            detectedUserTask: {
-                                type: ["string", "null"],
-                            },
                         },
-                        required: ["message", "tasks", "detectedUserTask"],
+                        required: ["message", "tasks"],
                     },
                 },
             }),
@@ -161,7 +155,6 @@ Usuario: ${message}
         return {
             message: data.message,
             tasks,
-            detectedUserTask: data.detectedUserTask ?? null,
         };
     } catch (error: any) {
         console.error("AI Service error:", {
@@ -187,7 +180,6 @@ Usuario: ${message}
                         "Da una caminata corta de 5 minutos para despejar tu mente.",
                 },
             ],
-            detectedUserTask: null,
         };
     }
 }
@@ -207,12 +199,12 @@ export async function askAIChat(
 Responde en JSON:
 
 {
-  "message": "respuesta empática larga (sin sugerir actividades)"
+  "message": "respuesta empática no tan larga (sin sugerir actividades)"
 }
 
 Reglas:
 - Mensaje empático
-- Varias líneas
+- No tan largo
 - No sugerir tareas
 - Sin texto fuera del JSON
 
