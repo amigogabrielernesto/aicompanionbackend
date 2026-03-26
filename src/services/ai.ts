@@ -6,7 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 const AI_CONFIG = {
     temperature: 0.7,
     maxOutputTokens: parseInt(process.env.AI_MAX_TOKENS || "1000", 10),
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
     timeoutMs: 8000,
 };
 
