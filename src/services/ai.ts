@@ -127,7 +127,9 @@ Usuario: ${message}
             AI_CONFIG.timeoutMs
         );
 
-        const data = response.response as AIResponse;
+        const text = response.text;
+        if (!text) throw new Error("No text produced by AI");
+        const data = JSON.parse(text) as AIResponse;
 
         /* =========================
            VALIDATIONS
@@ -246,7 +248,9 @@ Usuario: ${message}
             AI_CONFIG.timeoutMs
         );
 
-        const data = response.response as AIChatResponse;
+        const text = response.text;
+        if (!text) throw new Error("No text produced by AI chat");
+        const data = JSON.parse(text) as AIChatResponse;
 
         if (!data || typeof data.message !== "string") {
             throw new Error("Invalid AI chat response");
